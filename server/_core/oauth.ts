@@ -1,9 +1,22 @@
-import { COOKIE_NAME, ONE_YEAR_MS, OAUTH_STATE_COOKIE, decodeOAuthState } from "@shared/const";
+import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { parse as parseCookieHeader } from "cookie";
 import type { Express, Request, Response } from "express";
 import * as db from "../db";
 import { getSessionCookieOptions } from "./cookies";
+import { ENV } from "./env";
 import { sdk } from "./sdk";
+import axios from "axios";
+
+const OAUTH_STATE_COOKIE = "__Host-oauth-state";
+
+function generateRandomString(length: number): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let result = "";
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
 
 function getQueryParam(req: Request, key: string): string | undefined {
   const value = req.query[key];
@@ -11,6 +24,7 @@ function getQueryParam(req: Request, key: string): string | undefined {
 }
 
 export function registerOAuthRoutes(app: Express) {
+  // Discord OAuth callback
   app.get("/api/oauth/callback", async (req: Request, res: Response) => {
     const code = getQueryParam(req, "code");
     const state = getQueryParam(req, "state");
@@ -20,36 +34,54 @@ export function registerOAuthRoutes(app: Express) {
       return;
     }
 
-    // CSRF guard: the nonce in `state` must match the one-time cookie that
-    // startLogin set in the browser that began this login. An attacker can
-    // forge `state`, but cannot plant this cookie in the victim's browser.
-    const { nonce } = decodeOAuthState(state);
-    const expectedNonce = parseCookieHeader(req.headers.cookie ?? "")[OAUTH_STATE_COOKIE];
-    if (!nonce || nonce !== expectedNonce) {
+    // CSRF guard: verify state
+    const expectedState = parseCookieHeader(req.headers.cookie ?? "")[OAUTH_STATE_COOKIE];
+    if (!state || state !== expectedState) {
       res.status(403).json({ error: "invalid oauth state" });
       return;
     }
     res.clearCookie(OAUTH_STATE_COOKIE, { path: "/", secure: true, sameSite: "none" });
 
     try {
-      const tokenResponse = await sdk.exchangeCodeForToken(code, state);
-      const userInfo = await sdk.getUserInfo(tokenResponse.accessToken);
+      // Exchange Discord code for access token
+      const tokenResponse = await axios.post(
+        "https://discord.com/api/v10/oauth2/token",
+        new URLSearchParams({
+          client_id: ENV.discordClientId,
+          client_secret: ENV.discordClientSecret,
+          code,
+          grant_type: "authorization_code",
+          redirect_uri: `${req.protocol}://${req.get("host")}/api/oauth/callback`,
+        }),
+        {
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        }
+      );
 
-      if (!userInfo.openId) {
-        res.status(400).json({ error: "openId missing from user info" });
-        return;
-      }
+      const accessToken = tokenResponse.data.access_token;
 
+      // Get user info from Discord
+      const userResponse = await axios.get("https://discord.com/api/v10/users/@me", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      const discordUser = userResponse.data;
+      const discordId = discordUser.id;
+      const email = discordUser.email || null;
+      const username = discordUser.username || "Discord User";
+
+      // Upsert user (create or update)
       await db.upsertUser({
-        openId: userInfo.openId,
-        name: userInfo.name || null,
-        email: userInfo.email ?? null,
-        loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
+        openId: `discord-${discordId}`,
+        name: username,
+        email,
+        loginMethod: "discord",
         lastSignedIn: new Date(),
       });
 
-      const sessionToken = await sdk.createSessionToken(userInfo.openId, {
-        name: userInfo.name || "",
+      // Create JWT session token
+      const sessionToken = await sdk.createSessionToken(`discord-${discordId}`, {
+        name: username,
         expiresInMs: ONE_YEAR_MS,
       });
 
@@ -61,5 +93,28 @@ export function registerOAuthRoutes(app: Express) {
       console.error("[OAuth] Callback failed", error);
       res.status(500).json({ error: "OAuth callback failed" });
     }
+  });
+
+  // Discord OAuth login initiator (for reference)
+  app.get("/api/oauth/login", (req: Request, res: Response) => {
+    const state = generateRandomString(32);
+    const redirectUri = `${req.protocol}://${req.get("host")}/api/oauth/callback`;
+
+    res.cookie(OAUTH_STATE_COOKIE, state, {
+      path: "/",
+      maxAge: 600000, // 10 minutes
+      secure: true,
+      sameSite: "none",
+      httpOnly: true,
+    });
+
+    const url = new URL("https://discord.com/api/oauth2/authorize");
+    url.searchParams.set("client_id", ENV.discordClientId);
+    url.searchParams.set("redirect_uri", redirectUri);
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("scope", "identify email guilds");
+    url.searchParams.set("state", state);
+
+    res.redirect(url.toString());
   });
 }
