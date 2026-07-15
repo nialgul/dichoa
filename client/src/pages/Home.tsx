@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useLocation } from "wouter";
 import { ArrowRight, Shield, MessageSquare, Settings } from "lucide-react";
+import { startLogin } from "@/const";
 
 export default function Home() {
   const { user, isAuthenticated, loading } = useAuth();
@@ -18,26 +19,12 @@ export default function Home() {
 
   // 인증된 관리자는 대시보드로 자동 이동
   if (isAuthenticated && user?.role === "admin") {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Card className="p-8 text-center max-w-md">
-          <h1 className="text-2xl font-bold mb-4">환영합니다!</h1>
-          <p className="text-gray-600 mb-6">
-            {user?.name}님, 관리자 대시보드로 이동 중입니다...
-          </p>
-          <Button
-            onClick={() => setLocation("/dashboard")}
-            className="w-full"
-          >
-            대시보드로 이동
-          </Button>
-        </Card>
-      </div>
-    );
+    setLocation("/dashboard");
+    return null;
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 md:px-6 py-4 flex items-center justify-between">
@@ -46,7 +33,7 @@ export default function Home() {
             <p className="text-sm text-gray-600">관리자 대시보드</p>
           </div>
           {!isAuthenticated && (
-            <Button onClick={() => setLocation("/auth/login")} variant="default">
+            <Button onClick={() => startLogin()} variant="default">
               로그인
             </Button>
           )}
@@ -64,7 +51,7 @@ export default function Home() {
           </p>
           {!isAuthenticated && (
             <Button
-              onClick={() => setLocation("/auth/login")}
+              onClick={() => startLogin()}
               size="lg"
               className="gap-2"
             >
@@ -78,71 +65,56 @@ export default function Home() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
           {/* Feature 1 */}
           <Card className="p-6 hover:shadow-lg transition-shadow">
-            <div className="bg-blue-100 w-12 h-12 rounded-lg flex items-center justify-center mb-4">
-              <Shield className="text-blue-600" size={24} />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              안전한 관리
-            </h3>
+            <Shield className="w-12 h-12 text-blue-600 mb-4" />
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">보안 관리</h3>
             <p className="text-gray-600">
-              관리자 전용 접근 제어로 안전하게 봇을 관리하세요
+              Discord OAuth 2.0 인증과 JWT 기반 세션 관리로 안전한 접근 제어
             </p>
           </Card>
 
           {/* Feature 2 */}
           <Card className="p-6 hover:shadow-lg transition-shadow">
-            <div className="bg-green-100 w-12 h-12 rounded-lg flex items-center justify-center mb-4">
-              <MessageSquare className="text-green-600" size={24} />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              문의 관리
-            </h3>
+            <MessageSquare className="w-12 h-12 text-green-600 mb-4" />
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">문의 관리</h3>
             <p className="text-gray-600">
-              사용자 문의를 효율적으로 관리하고 응답하세요
+              웹 기반 문의 시스템과 Discord 웹훅 알림으로 효율적인 관리
             </p>
           </Card>
 
           {/* Feature 3 */}
           <Card className="p-6 hover:shadow-lg transition-shadow">
-            <div className="bg-purple-100 w-12 h-12 rounded-lg flex items-center justify-center mb-4">
-              <Settings className="text-purple-600" size={24} />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              봇 설정
-            </h3>
+            <Settings className="w-12 h-12 text-purple-600 mb-4" />
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">봇 설정</h3>
             <p className="text-gray-600">
-              서버별 봇 설정을 간편하게 관리하세요
+              서버별 봇 설정과 웹훅 관리를 한 곳에서 통합 관리
             </p>
           </Card>
         </div>
-      </section>
 
-      {/* CTA Section */}
-      {!isAuthenticated && (
-        <section className="bg-blue-600 text-white py-12 md:py-16 mt-12">
-          <div className="max-w-6xl mx-auto px-4 md:px-6 text-center">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">
-              지금 시작하세요
-            </h2>
-            <p className="text-lg text-blue-100 mb-8">
-              Discord OAuth로 안전하게 로그인하고 관리자 기능을 이용하세요
-            </p>
+        {/* CTA Section */}
+        <div className="mt-20 text-center">
+          <h3 className="text-2xl font-bold text-gray-900 mb-4">
+            지금 시작하세요
+          </h3>
+          <p className="text-gray-600 mb-8">
+            Discord 계정으로 로그인하고 관리자 대시보드에 접근하세요
+          </p>
+          {!isAuthenticated && (
             <Button
-              onClick={() => setLocation("/auth/login")}
+              onClick={() => startLogin()}
               size="lg"
-              variant="secondary"
               className="gap-2"
             >
-              로그인하기
+              Discord로 로그인
               <ArrowRight size={20} />
             </Button>
-          </div>
-        </section>
-      )}
+          )}
+        </div>
+      </section>
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-gray-400 py-8 mt-12">
-        <div className="max-w-6xl mx-auto px-4 md:px-6 text-center">
+      <footer className="bg-white border-t border-gray-200 mt-20">
+        <div className="max-w-6xl mx-auto px-4 md:px-6 py-8 text-center text-gray-600">
           <p>&copy; 2026 Choa Manager. All rights reserved.</p>
         </div>
       </footer>
